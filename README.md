@@ -21,6 +21,19 @@ The programme needed to turn one source video into distinct, branded versions fo
 
 The first version of the plan assumed that volume and a click counter would be enough. Building the system exposed a harder problem: platform publishing data is not automatically evidence of human reach, backlinks, or AI visibility.
 
+## Goal and implementation plan
+
+The goal was to build a measured publishing programme without scaling an unproven content or distribution model to clients.
+
+The implementation plan was deliberately staged:
+
+1. Validate the strategy cheaply with a small number of branded platforms.
+2. Separate the content engine from the scheduling and publishing tool.
+3. Automate reliable API and RSS paths while keeping unsupported platforms in a manual queue.
+4. Run a New Seas pilot with live checks and measurement before considering client rollout.
+
+That sequence kept the decision reversible. The programme could prove or disprove its value before a larger multi-client build.
+
 ## What I built
 
 - A content-engine handoff from source video and transcript to platform-specific versions.
@@ -28,10 +41,12 @@ The first version of the plan assumed that volume and a click counter would be e
 - Direct platform connectors where APIs existed and RSS-based paths where they were more reliable.
 - Manual queues for platforms that could not support safe automated publishing.
 - Retry, deduplication, concurrency control, and per-topic visibility into batch generation.
+- A shared renderer so headings, lists, links, and platform-specific formats stayed consistent.
+- Live checks that verified whether a published URL actually existed and remained reachable.
 - A reporting layer combining scheduler data with crawler checks and external measurement sources.
 - A quality and AI-readability audit that checked what was actually reachable by search and AI crawlers.
 
-## Architecture
+## Architecture and production flow
 
 ```text
 source video
@@ -57,23 +72,24 @@ master content -> platform-specific variants
 
 The expanded model is in [architecture.md](architecture.md).
 
-## Design decisions
+### Production and reliability
 
-### One source, distinct platform versions
+#### One source, distinct platform versions
 
 The system generated a platform-specific version rather than copying the same article everywhere. This reduced measured duplication from 62.6% to 25.1% and made the distribution programme more defensible as content work rather than mass reposting.
 
-### Automate where the platform allows it
+#### Automate where the platform allows it
 
 The publishing matrix separated direct APIs, RSS imports, and manual queues. Some platforms did not support reliable automated publishing. Those stayed manual or were treated as lower-value channels instead of being represented as fully automated.
 
-### Measure reach with sources that can answer the question
+#### Reliability controls
 
-The report separated click activity, crawlability, backlinks, and AI visibility. A single counter cannot answer all four. Each metric received a source and a limitation statement.
-
-### Audit the system itself
-
-The reporting layer checked live pages, robots directives, canonical URLs, database counts, and crawler behaviour. This made the programme capable of reporting that a measurement was unavailable, rather than filling the gap with a flattering number.
+- Per-topic concurrency control for large batches.
+- Retry-failed and deduplication paths.
+- One shared renderer instead of separate markdown-to-HTML implementations.
+- Truncation detection before content was saved or published.
+- Live checks for platform URLs.
+- A scheduled report that stated which sources had incomplete coverage.
 
 ## Results
 
@@ -83,30 +99,62 @@ The reporting layer checked live pages, robots directives, canonical URLs, datab
 - The weekly report runtime dropped from 132 seconds to 5 seconds.
 - The audit identified 79 articles blocked by robots rules and noindex directives.
 
-## Three numbers that could not be trusted
+## Failure analysis and lessons learned
 
-### 1. The click total included a crawler
+The system became valuable because it exposed its own failure modes instead of hiding them behind a volume number.
 
-The tracker recorded 836 clicks. 546 came from one bot in a short burst. The raw total could not be presented as human traffic, so the report filtered the burst and stated that it had done so.
+### Truncated content was being saved as complete
 
-### 2. The backlink count was not measurable through the chosen source
+The generator could run out of tokens and save a post that ended in the middle of a sentence. The publishing path was changed to reject incomplete output rather than store it as successful content. A repair path was added for affected posts.
 
-Ahrefs had crawled zero pages on the free subdomains used by the programme. A backlink count of zero from that source did not prove that the programme had created zero backlinks. It proved that the source had no crawl coverage for this measurement. The correct result was an explicit limitation, not a made-up trend line.
+### One platform received raw markdown
 
-### 3. The scheduler database count was incomplete
+One connector published headings and links as plain text. Three copies of the renderer had drifted apart, so the fix was to centralize rendering and verify the output before publishing. The platform-specific repair pass removed the raw markdown from the affected posts.
 
-The database was missing 51 published articles and counted 29 duplicates as unique entries. Counts taken from the database alone were therefore wrong in both directions. The public feed was used as a cross-check before reporting totals.
+### Published did not always mean live
 
-## What the audit changed
+Some posts returned an ID from a platform API but remained drafts. The system had been trusting the request response instead of checking the returned publication state. The reporting model was changed to distinguish created, published, reachable, and manually pending.
 
-- Bot bursts were separated from click totals.
-- Live pages were fetched as a crawler to detect robots and noindex blocks.
-- Public feeds were used to reconcile missing or duplicated database entries.
-- The report separated app statistics from backlink and AI-visibility claims.
-- Platform-specific rendering was centralized so headings, lists, and links did not degrade differently by connector.
-- Truncated output was rejected instead of being saved as complete content.
+### Redirects created the wrong measurement
 
-The conclusion was deliberately narrower than the original ambition: the programme had production volume and a working distribution layer, but its first measurement model could not prove human traffic, backlinks, or AI citations without better instrumentation.
+The first link path sent readers through a click tracker before reaching the site. That made the tracker look like the backlink destination and could not prove authority to the target domain. The publishing path was corrected to use direct site links with intentional tracking parameters.
+
+### The content audit found unsupported claims
+
+An editorial audit found fabricated or unsupported statistics, outdated advice, and claims attached to sources that did not support them. A correction pass removed 250 unsupported claims from 663 stored posts. The lesson was more important than the cleanup: verifying that a URL exists is not the same as verifying that the claim is true.
+
+### Database counts were not enough
+
+The scheduler database was missing 51 published articles and counted 29 duplicates as unique entries. Public feeds were used as a second source before reporting the final totals.
+
+## Measurement and what we could not claim
+
+The reporting layer separated four different questions:
+
+| Question | Evidence used |
+|---|---|
+| Did the system publish? | Scheduler state plus live-page check |
+| Did a person click? | Analytics with known crawler activity filtered out |
+| Did the pages earn backlinks? | A crawler with coverage of the target pages |
+| Can search or AI systems read the pages? | Robots, noindex, canonical, and live-fetch checks |
+
+The audit found that the raw click total included a bot burst, the chosen backlink source had no crawl coverage for the free subdomains, and the baseline AI-visibility check returned zero citations. Those were reported as measurement limits, not converted into positive results.
+
+## Security and operational hardening
+
+- Platform credentials and account details remain outside the public case study.
+- Publishing paths use scoped connectors and explicit manual boundaries.
+- Content is checked for truncation and render integrity before live publishing.
+- Failed and duplicate jobs are visible rather than silently retried into additional posts.
+- Platform limitations are documented so a manual queue is not mistaken for automation.
+
+## Handoff and post-launch operations
+
+- The reporting layer was redesigned into a simple all-platform view and focused per-channel views.
+- App statistics were separated from Bing and AI-visibility measurements.
+- An AI-readability audit established a baseline for monthly comparison.
+- The report records source coverage and measurement limitations alongside the numbers.
+- The programme conclusion stayed deliberately narrow: it had production volume and a working distribution layer, but it could not yet prove human traffic, backlinks, or AI citations without better instrumentation.
 
 ## What I owned
 
@@ -115,4 +163,3 @@ I owned the programme design, platform matrix, content-generation handoff, sched
 ## Privacy boundary
 
 See [privacy.md](privacy.md) for the exact boundary around what is intentionally omitted.
-
