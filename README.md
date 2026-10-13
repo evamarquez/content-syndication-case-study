@@ -163,3 +163,15 @@ I owned the programme design, platform matrix, content-generation handoff, sched
 ## Privacy boundary
 
 See [privacy.md](privacy.md) for the exact boundary around what is intentionally omitted.
+
+## Project documentation
+
+Read the delivery evidence as a case study:
+
+- [Project brief](docs/project-brief.md)
+- [Distribution design](docs/distribution-design.md)
+- [Quality and measurement controls](docs/quality-measurement-controls.md)
+- [Production evidence](docs/production-evidence.md)
+- [Close-out report](docs/close-out-report.md)
+
+The [documentation index](docs/README.md) explains how the artefacts fit together.
