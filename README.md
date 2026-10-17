@@ -56,6 +56,12 @@ This diagram describes the public operating model, not confidential implementati
 
 I owned program design, platform planning, content handoff, scheduler design, publishing reliability improvements, reporting logic, and the evidence review that identified limits in the original metrics.
 
+## Key decisions and challenges
+
+- **Platforms with different publishing capabilities:** Used APIs and RSS where reliable, with manual queues elsewhere, rather than claiming every destination was automated.
+- **Duplicate or incomplete posts:** Added platform-specific formatting, deduplication, and validation. Measured cross-platform duplication declined from 62.6% to 25.1%.
+- **Misleading publishing metrics:** Added live-page checks and separated published content from traffic, backlinks, and AI visibility. Weekly reporting runtime fell from 132 seconds to 5 seconds.
+
 ## Project documentation
 
 - [Project brief](docs/project-brief.md) — scope, need, and success criteria
